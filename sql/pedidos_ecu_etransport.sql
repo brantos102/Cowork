@@ -3,16 +3,20 @@
 -- ----------------------------------------------------------------------------
 -- Version con las columnas nuevas solicitadas:
 --   * Transporte        -> transporte.razon_social
---   * Placa             -> vehiculo.placa
+--   * Placa             -> vehiculo.patente  (verificado en information_schema)
 --   * Tipo_Vehiculo     -> tipo_vehiculo.descripcion
 --   * Observaciones     -> evento_pedido.observaciones (ultima no vacia)
 --   * Zona (urb/rural)  -> pendiente de confirmar tabla (ver bloque ZONA abajo)
 --
--- Cadena de enlace usada:
---   pedido.ultima_idcarta_porte -> carta_porte.idvehiculo -> vehiculo
---   vehiculo.idtransporte       -> transporte   (razon_social)
---   vehiculo.idtipo_vehiculo    -> tipo_vehiculo(descripcion)
+-- Cadena de enlace (verificada contra information_schema del schema etransport):
+--   pedido.ultima_idcarta_porte -> carta_porte
+--   carta_porte.idvehiculo      -> vehiculo.patente          (Placa)
+--   carta_porte.idtransporte    -> transporte.razon_social   (Transporte)
+--   vehiculo.idtipo_vehiculo    -> tipo_vehiculo.descripcion (Tipo_Vehiculo)
 --   evento_pedido.idpedido      -> observaciones (ultimo evento con texto)
+--
+-- OJO: vehiculo NO tiene idtransporte; el transportista cuelga de la carta
+-- de porte. carta_porte tambien tiene su propia columna observaciones.
 --
 -- Todos los joins nuevos son 1:1 (o 1 fila por pedido en el caso de las
 -- observaciones), por lo tanto NO multiplican filas del resultado original.
@@ -185,9 +189,10 @@ SELECT
     ex.razon_social AS Expreso,
     -- ---------------- COLUMNAS NUEVAS ----------------
     tr.razon_social   AS Transporte,
-    veh.placa         AS Placa,
+    veh.patente       AS Placa,
     tv.descripcion    AS Tipo_Vehiculo,
     obs.observaciones AS Observaciones,
+    -- cp.observaciones AS Observaciones_Carta_Porte,  -- opcional: obs. del despacho
     -- Zona: descomentar la linea que corresponda una vez identificada la tabla
     -- (ver bloque "DESCUBRIMIENTO DE ZONA" al final del archivo).
     CAST(NULL AS CHAR) AS Zona,
@@ -213,12 +218,8 @@ LEFT JOIN tipo_servicio_administrativo   tsa  ON tsa.idtipo_servicio_administrat
 -- Puerta de entrada al vehiculo: la ultima carta de porte del pedido
 LEFT JOIN carta_porte   cp   ON cp.idcarta_porte    = fp.ultima_idcarta_porte
 LEFT JOIN vehiculo      veh  ON veh.idvehiculo      = cp.idvehiculo
-LEFT JOIN transporte    tr   ON tr.idtransporte     = veh.idtransporte
---   Si en tu esquema el transportista cuelga de la carta de porte y no del
---   vehiculo, usar en su lugar:  ON tr.idtransporte = cp.idtransporte
+LEFT JOIN transporte    tr   ON tr.idtransporte     = cp.idtransporte
 LEFT JOIN tipo_vehiculo tv   ON tv.idtipo_vehiculo  = veh.idtipo_vehiculo
---   Si tipo_vehiculo se relaciona directo con el vehiculo (segun el screenshot
---   la tabla expone idvehiculo), usar en su lugar: ON tv.idvehiculo = veh.idvehiculo
 LEFT JOIN ultima_observacion obs ON obs.idpedido    = fp.idpedido
 -- Zona (descomentar junto con la columna de arriba):
 -- LEFT JOIN codigo_postal cpd ON cpd.idcodigo_postal = fp.idcodigo_postal
