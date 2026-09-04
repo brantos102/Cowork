@@ -6,7 +6,8 @@
 --   * Placa             -> vehiculo.patente  (verificado en information_schema)
 --   * Tipo_Vehiculo     -> tipo_vehiculo.descripcion
 --   * Observaciones     -> evento_pedido.observaciones (ultima no vacia)
---   * Zona (urb/rural)  -> pendiente de confirmar tabla (ver bloque ZONA abajo)
+--   * Zona (urb/rural)  -> codigo_postal.zona del CP de DESTINO, normalizada a
+--                          RURAL / URBANO mediante CASE por patron
 --   * COORDINADO        -> fecha del ultimo evento COORDINADO
 --   * RE-COORDINADO     -> fecha del ultimo evento RE-COORDINADO
 --
@@ -205,11 +206,16 @@ SELECT
     tv.descripcion    AS Tipo_Vehiculo,
     obs.observaciones AS Observaciones,
     -- cp.observaciones AS Observaciones_Carta_Porte,  -- opcional: obs. del despacho
-    -- Zona: descomentar la linea que corresponda una vez identificada la tabla
-    -- (ver bloque "DESCUBRIMIENTO DE ZONA" al final del archivo).
-    CAST(NULL AS CHAR) AS Zona,
-    -- z.descripcion   AS Zona,          -- opcion A: tabla zona via codigo_postal
-    -- cpd.tipo_zona   AS Zona,          -- opcion B: columna dentro de codigo_postal
+    -- Zona de ENTREGA normalizada. codigo_postal.zona trae varias
+    -- denominaciones (ZONA URBANA, RURAL 2, SEMI-RURAL...); el CASE las
+    -- colapsa a los dos unicos valores pedidos. RURAL se evalua primero para
+    -- que un valor mixto tipo 'SEMI-RURAL' no termine clasificado como URBANO.
+    CASE
+        WHEN cpd.zona IS NULL OR TRIM(cpd.zona) = '' THEN NULL
+        WHEN UPPER(TRIM(cpd.zona)) LIKE '%RURAL%'    THEN 'RURAL'
+        WHEN UPPER(TRIM(cpd.zona)) LIKE '%URBAN%'    THEN 'URBANO'
+        ELSE NULL   -- poner 'NO_HOMOLOGADO' si se quieren detectar faltantes
+    END AS Zona,
     -- -------------------------------------------------
     'ecu_etransport'  AS Source,
     'Ecuador'         AS country,
@@ -233,35 +239,31 @@ LEFT JOIN vehiculo      veh  ON veh.idvehiculo      = cp.idvehiculo
 LEFT JOIN transporte    tr   ON tr.idtransporte     = cp.idtransporte
 LEFT JOIN tipo_vehiculo tv   ON tv.idtipo_vehiculo  = veh.idtipo_vehiculo
 LEFT JOIN ultima_observacion obs ON obs.idpedido    = fp.idpedido
--- Zona (descomentar junto con la columna de arriba):
--- LEFT JOIN codigo_postal cpd ON cpd.idcodigo_postal = fp.idcodigo_postal
--- LEFT JOIN zona          z   ON z.idzona            = cpd.idzona
+-- CP de destino, unicamente para resolver la zona (cpl ya cubre el origen)
+LEFT JOIN codigo_postal cpd  ON cpd.idcodigo_postal = fp.idcodigo_postal
 ;
 
 
 -- ============================================================================
--- DESCUBRIMIENTO DE ZONA (urbana / rural)  -- ejecutar una sola vez
+-- CONTROL DE LA NORMALIZACION DE ZONA
 -- ----------------------------------------------------------------------------
--- 1) Buscar tablas cuyo nombre contenga "zona":
--- SHOW TABLES LIKE '%zona%';
+-- Listar los valores crudos de codigo_postal.zona y como los clasifica el CASE.
+-- Todo lo que salga con SIN_CLASIFICAR hay que sumarlo al CASE de la consulta:
 --
--- 2) Buscar cualquier columna que hable de zona / urbano / rural:
--- SELECT table_name, column_name, data_type
--- FROM information_schema.columns
--- WHERE table_schema = DATABASE()
---   AND (column_name LIKE '%zona%'
---        OR column_name LIKE '%urban%'
---        OR column_name LIKE '%rural%')
--- ORDER BY table_name;
+-- SELECT zona AS valor_crudo,
+--        COUNT(*) AS cps,
+--        CASE
+--            WHEN zona IS NULL OR TRIM(zona) = '' THEN 'NULL/VACIO'
+--            WHEN UPPER(TRIM(zona)) LIKE '%RURAL%' THEN 'RURAL'
+--            WHEN UPPER(TRIM(zona)) LIKE '%URBAN%' THEN 'URBANO'
+--            ELSE 'SIN_CLASIFICAR'
+--        END AS clasificado
+-- FROM codigo_postal
+-- GROUP BY zona
+-- ORDER BY clasificado, cps DESC;
 --
--- 3) Los candidatos mas probables son codigo_postal / localidad / parroquia:
--- SHOW COLUMNS FROM codigo_postal;
--- SHOW COLUMNS FROM localidad;
---
--- 4) Ver los valores reales para confirmar que son URBANA/RURAL:
--- SELECT DISTINCT <columna_zona> FROM <tabla_zona> LIMIT 20;
---
--- Con eso se completa el join y se descomenta la columna Zona.
+-- Si zona guarda codigos (1, 2, Z1...) y no texto, el LIKE no alcanza: hay que
+-- reemplazar el CASE por un mapeo explicito de esos codigos.
 -- ============================================================================
 
 -- ============================================================================
