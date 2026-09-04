@@ -22,6 +22,10 @@
 -- observaciones), por lo tanto NO multiplican filas del resultado original.
 -- ============================================================================
 
+-- Si el cliente SQL no tiene schema activo (error 1046 "No database selected"),
+-- descomentar la linea siguiente o seleccionar etransport en el arbol de bases.
+-- USE etransport;
+
 WITH filtered_pedidos AS (
     -- 1. Pre-filtrado SARGable de pedidos por rango de fecha deseado
     SELECT
