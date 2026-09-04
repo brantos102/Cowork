@@ -7,6 +7,8 @@
 --   * Tipo_Vehiculo     -> tipo_vehiculo.descripcion
 --   * Observaciones     -> evento_pedido.observaciones (ultima no vacia)
 --   * Zona (urb/rural)  -> pendiente de confirmar tabla (ver bloque ZONA abajo)
+--   * COORDINADO        -> fecha del ultimo evento COORDINADO
+--   * RE-COORDINADO     -> fecha del ultimo evento RE-COORDINADO
 --
 -- Cadena de enlace (verificada contra information_schema del schema etransport):
 --   pedido.ultima_idcarta_porte -> carta_porte
@@ -85,7 +87,9 @@ consolidated_events AS (
         'PEDIDO_ENTREGADO',
         'HABILITADO_RUTEO',
         'FECHA_ESTIMADA_ENTREGA',
-        'CARTA_PORTE_CREADA_RETIRO'
+        'CARTA_PORTE_CREADA_RETIRO',
+        'COORDINADO',
+        'RE-COORDINADO'
     )
 ),
 ranked_events AS (
@@ -107,7 +111,9 @@ pivoted_events AS (
         MAX(CASE WHEN codigo_evento = 'PEDIDO_ENTREGADO'          THEN fecha_evento_clean END) AS Fecha_Entregado,
         MAX(CASE WHEN codigo_evento = 'FECHA_ESTIMADA_ENTREGA'    THEN fecha_evento_clean END) AS Fecha_Estimada_Entrega,
         MAX(CASE WHEN codigo_evento = 'HABILITADO_RUTEO'          THEN fecha_evento_clean END) AS Fecha_Con_Stock,
-        MAX(CASE WHEN codigo_evento = 'CARTA_PORTE_CREADA_RETIRO' THEN fecha_evento_clean END) AS Fecha_Carta_Porte_R
+        MAX(CASE WHEN codigo_evento = 'CARTA_PORTE_CREADA_RETIRO' THEN fecha_evento_clean END) AS Fecha_Carta_Porte_R,
+        MAX(CASE WHEN codigo_evento = 'COORDINADO'                THEN fecha_evento_clean END) AS Fecha_Coordinado,
+        MAX(CASE WHEN codigo_evento = 'RE-COORDINADO'             THEN fecha_evento_clean END) AS Fecha_Re_Coordinado
     FROM ranked_events
     WHERE ranking = 1
     GROUP BY idpedido
@@ -190,6 +196,8 @@ SELECT
     evt.Fecha_Con_Stock,
     evt.Fecha_Estimada_Entrega,
     evt.Fecha_Carta_Porte_R,
+    evt.Fecha_Coordinado    AS `COORDINADO`,
+    evt.Fecha_Re_Coordinado AS `RE-COORDINADO`,
     ex.razon_social AS Expreso,
     -- ---------------- COLUMNAS NUEVAS ----------------
     tr.razon_social   AS Transporte,
